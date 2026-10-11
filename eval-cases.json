@@ -1,0 +1,5 @@
+[
+  { "name": "positive sentiment", "output": "positive", "expected": "positive" },
+  { "name": "negative sentiment", "output": "negative\n", "expected": "negative" },
+  { "name": "neutral sentiment", "output": "positive", "expected": "neutral" }
+]
