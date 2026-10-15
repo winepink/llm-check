@@ -1,39 +1,58 @@
 # llm-check
 
-A small CLI for checking LLM outputs against repeatable examples.
+**A repeatable check for saved LLM classification outputs.**
 
-Currently evaluates saved classification outputs from a JSON file using
-normalized exact matching. It does not call a model yet.
+Turn expected and actual labels into readable pass/fail results and an optional JSON report. Check output regressions without calling a model or paying for another inference run.
 
-## Run
+Built with **TypeScript and Node.js**. Comparison trims surrounding whitespace and lowercases both labels before exact matching.
 
-Requires Node.js 22 or newer.
+## Quick start
 
-    npm ci
-    npm run check
-    npm run eval -- eval-cases.json
+Requires **Node.js 22+** and npm.
 
-The sample includes one incorrect output. Expect two passes, one failure,
-and exit code 1.
+```bash
+git clone https://github.com/winepink/llm-check.git
+cd llm-check
+npm ci
+npm run check
+npm run eval -- eval-cases.json
+```
 
-## Case file format
+The sample intentionally includes an incorrect classification:
 
-The evaluator expects a nonempty JSON array. Each case must have string
-fields named `name`, `output`, and `expected`.
+```text
+PASS positive sentiment
+PASS negative sentiment
+FAIL neutral sentiment
+  expected="neutral" actual="positive"
 
-    [
-      { "name": "positive sentiment", "output": "positive", "expected": "positive" }
-    ]
+2/3 passed
+```
 
-Comparison trims leading and trailing whitespace and lowercases both
-`output` and `expected`.
+Exit code **1 is expected** for this sample: evaluation found a mismatch.
 
-## Save results
+## Define cases
 
-    npm run eval -- eval-cases.json --report results.json
+Supply a nonempty JSON array with string fields `name`, `output`, and `expected`:
 
-The sample still prints two passes and one failure and exits with code 1.
-It also writes `results.json`, including results for the failed case:
+```json
+[
+  { "name": "positive sentiment", "output": " Positive\n", "expected": "positive" },
+  { "name": "billing ticket", "output": "billing", "expected": "billing" }
+]
+```
+
+```bash
+npm run eval -- your-cases.json
+```
+
+`" Positive\n"` matches `"positive"`. Internal whitespace, punctuation, and wording still matter. This is a label checker, not semantic grading.
+
+## Save a report
+
+```bash
+npm run eval -- eval-cases.json --report results.json
+```
 
 ```json
 {
@@ -48,20 +67,35 @@ It also writes `results.json`, including results for the failed case:
 }
 ```
 
-The report keeps the original strings; normalization only affects comparison.
-Paths are relative to the current directory. The report's parent directory
-must already exist. An existing report is overwritten, so use a new filename
-to keep an earlier run. The report path must differ from the case file path.
-The default example filename `results.json` is ignored by Git.
+Reports retain original strings and are written even when cases fail. Paths are relative to the current directory; the parent must already exist. Existing reports are overwritten, and the report path must differ from the case file. The default `results.json` is ignored by Git.
 
 ## Exit codes
 
-- `0`: all valid evaluations passed
-- `1`: the case file was valid, but at least one evaluation failed
-- `2`: invalid arguments, missing or invalid input, or a runner error such as
-  being unable to write the report
+| Code | Meaning | Example |
+| --- | --- | --- |
+| `0` | Every case passed | All labels match |
+| `1` | Evaluation mismatch | Actual label differs |
+| `2` | Input, usage, or runner error | Missing file, malformed JSON, invalid fields, report write failure |
 
-Examples:
+A shell script or CI job can distinguish mismatches from a broken invocation. No CI integration is bundled yet.
 
-    npm run eval -- eval-cases.json
-    npm run eval -- missing.json
+## Current scope
+
+**Included:** input validation, normalized exact matching, per-case console results, JSON reports, and process exit codes.
+
+**Not implemented yet:** model API calls, prompt execution, semantic similarity, LLM-as-judge scoring, latency/cost tracking, or a dashboard. Supply saved outputs yourself; no API key is required.
+
+## Development
+
+```bash
+npm run check                         # Type-check without emitting files
+npm run eval -- eval-cases.json       # Intentional mismatch: exit 1
+npm run eval -- missing.json          # Input error: exit 2
+```
+
+```text
+src/eval.ts        CLI, validation, evaluation, reporting
+eval-cases.json    Three classification examples
+package.json       Scripts and pinned development dependencies
+tsconfig.json      TypeScript configuration
+```
