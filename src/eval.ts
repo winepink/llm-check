@@ -1,9 +1,20 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { parseArgs } from "node:util";
 
 type EvalCase = {
   name: string;
   output: string;
   expected: string;
+};
+
+type EvalResult = EvalCase & { passed: boolean };
+
+type EvalReport = {
+  total: number;
+  passed: number;
+  failed: number;
+  results: EvalResult[];
 };
 
 function normalize(value: string): string {
@@ -76,40 +87,69 @@ async function loadCases(path: string): Promise<EvalCase[]> {
   }
 }
 
-function runEvaluations(cases: EvalCase[]): boolean {
-  let passed = 0;
+function evaluate(cases: EvalCase[]): EvalReport {
+  const results = cases.map((item) => ({
+    ...item,
+    passed: normalize(item.output) === normalize(item.expected),
+  }));
+  const passed = results.filter((item) => item.passed).length;
 
-  for (const item of cases) {
-    const matches = normalize(item.output) === normalize(item.expected);
-    if (matches) passed += 1;
+  return {
+    total: results.length,
+    passed,
+    failed: results.length - passed,
+    results,
+  };
+}
 
-    console.log(`${matches ? "PASS" : "FAIL"} ${item.name}`);
+function printReport(report: EvalReport): void {
+  for (const item of report.results) {
+    console.log(`${item.passed ? "PASS" : "FAIL"} ${item.name}`);
 
-    if (!matches) {
+    if (!item.passed) {
       console.log(
         `  expected=${JSON.stringify(item.expected)} actual=${JSON.stringify(item.output)}`,
       );
     }
   }
 
-  console.log(`\n${passed}/${cases.length} passed`);
-  return passed === cases.length;
+  console.log(`\n${report.passed}/${report.total} passed`);
 }
 
-const casesPath = process.argv[2];
+try {
+  const { positionals, values } = parseArgs({
+    options: { report: { type: "string" } },
+    allowPositionals: true,
+  });
+  const casesPath = positionals[0];
 
-if (casesPath === undefined) {
-  console.error("Input error: missing case file path");
-  console.error("Usage: npm run eval -- <cases.json>");
-  process.exitCode = 2;
-} else {
-  try {
-    const cases = await loadCases(casesPath);
-    process.exitCode = runEvaluations(cases) ? 0 : 1;
-  } catch (error) {
-    console.error(
-      `Input error: ${error instanceof Error ? error.message : String(error)}`,
+  if (casesPath === undefined || positionals.length !== 1) {
+    throw new Error(
+      "expected one case file path. Usage: npm run eval -- <cases.json> [--report <report.json>]",
     );
-    process.exitCode = 2;
   }
+
+  if (values.report !== undefined && resolve(values.report) === resolve(casesPath)) {
+    throw new Error("report path must be different from the case file path");
+  }
+
+  const cases = await loadCases(casesPath);
+  const report = evaluate(cases);
+  printReport(report);
+
+  if (values.report !== undefined) {
+    try {
+      await writeFile(values.report, JSON.stringify(report, null, 2) + "\n", "utf8");
+    } catch (error) {
+      throw new Error(
+        `could not write report: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    console.log(`Report saved to ${values.report}`);
+  }
+
+  process.exitCode = report.failed === 0 ? 0 : 1;
+} catch (error) {
+  console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 2;
 }

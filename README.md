@@ -28,11 +28,38 @@ fields named `name`, `output`, and `expected`.
 Comparison trims leading and trailing whitespace and lowercases both
 `output` and `expected`.
 
+## Save results
+
+    npm run eval -- eval-cases.json --report results.json
+
+The sample still prints two passes and one failure and exits with code 1.
+It also writes `results.json`, including results for the failed case:
+
+```json
+{
+  "total": 3,
+  "passed": 2,
+  "failed": 1,
+  "results": [
+    { "name": "positive sentiment", "output": "positive", "expected": "positive", "passed": true },
+    { "name": "negative sentiment", "output": "negative\n", "expected": "negative", "passed": true },
+    { "name": "neutral sentiment", "output": "positive", "expected": "neutral", "passed": false }
+  ]
+}
+```
+
+The report keeps the original strings; normalization only affects comparison.
+Paths are relative to the current directory. The report's parent directory
+must already exist. An existing report is overwritten, so use a new filename
+to keep an earlier run. The report path must differ from the case file path.
+The default example filename `results.json` is ignored by Git.
+
 ## Exit codes
 
 - `0`: all valid evaluations passed
 - `1`: the case file was valid, but at least one evaluation failed
-- `2`: the input file was missing, malformed, or had the wrong structure
+- `2`: invalid arguments, missing or invalid input, or a runner error such as
+  being unable to write the report
 
 Examples:
 
